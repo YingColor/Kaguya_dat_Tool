@@ -6,10 +6,10 @@
 随本工具分发的第三方二进制如下。它们都保持**上游原样，未做任何修改**。
 
 > **本工具自身的许可证 ≠ 这些第三方组件的许可证。**
-> 本工具源码采用 **PolyForm Noncommercial License 1.0.0**（禁止商业使用，
-> 见仓库根目录 `LICENSE`）；而下面这些组件仍按**各自的原许可证**授权 ——
-> 其中 Nepgear 的 MIT 与 Locale Emulator 的 LGPL-3.0 **都允许商业使用**。
-> 本工具的非商业限制**只约束本项目作者创作的部分**，不改变、也不对任何
+> 本工具源码采用 **GNU General Public License v3.0（GPL-3.0）**，
+> 见仓库根目录 `LICENSE`；下面这些第三方组件仍按**各自的原许可证**授权 ——
+> Nepgear 的 MIT 与 Locale Emulator 的 LGPL-3.0。
+> 本仓库的许可证只覆盖本项目作者创作的部分，不改变、也不对任何
 > 第三方组件附加限制（LGPL-3.0 尤其不允许附加限制）。
 
 ---
@@ -71,7 +71,7 @@
    **原样放进游戏目录，并以独立进程的方式调用**（`LEProc.exe <目标exe>`），
    与本工具之间**不存在链接关系**，属于「聚合（mere aggregation）」。
    因此**本工具自身的源代码不受 LGPL 传染**，仍按仓库根目录 `LICENSE`
-   （PolyForm Noncommercial 1.0.0）授权。
+   （GPL-3.0）授权。
 
 > 提示：`LEConfig.xml` 里默认 `RedirectRegistry=true`，含义是把注册表读写
 > **重定向到 Locale Emulator 自己的私有位置**，不会污染系统区域设置。
