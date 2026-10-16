@@ -4,9 +4,6 @@
 从原版游戏出发，导出文本 → 翻译 → 打回去，工具自己现做一份能显示简体中文的字体，
 再给你一个双击就能进的启动器。
 
-参考了 `SiglusExtract`（Siglus 引擎）的思路，产出物形态也一样：
-**一个游戏启动器 + 一套汉化数据**。
-
 工具本体叫 **KaguyaPatch**，打包出两个程序：图形界面的 `KaguyaPatch.exe`
 和命令行的 `KaguyaPatchCLI.exe`；装进游戏里的启动器叫 `KaguyaEngine_Patch.exe`。
 
