@@ -1,0 +1,40 @@
+# ── 汉化产物 / 游戏内容（绝对不能进仓库）────────────────
+# message.dat 译文、游戏本体数据、汉化包、游戏截图
+汉化成品/
+汉化数据/
+效果截图/
+截图/
+输出/
+*汉化包*
+*.dat
+*.chs
+Nepgear.log
+slotmap*.txt
+*译文*.txt
+
+# ── 构建产物 ──────────────────────────────────────────
+build/
+dist/
+*.spec
+__pycache__/
+*.py[cod]
+
+# 内嵌打包用的启动器（由 build.py 自动生成）
+launcher/KaguyaEngine_Patch.exe
+
+# ── 自备底座字体：只保留说明，字体文件本身不入库 ────────
+fonts/*
+!fonts/说明.txt
+
+# ── 本地杂物 ──────────────────────────────────────────
+_work/
+.workbuddy/
+*.log
+
+# ── 编辑器 / 系统 ─────────────────────────────────────
+.vscode/
+.idea/
+*.swp
+.DS_Store
+Thumbs.db
+desktop.ini

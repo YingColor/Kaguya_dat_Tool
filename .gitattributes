@@ -1,0 +1,11 @@
+# 二进制资产：禁止 Git 做换行符转换和文本差异（避免损坏）
+*.dll   binary
+*.exe   binary
+*.ico   binary
+*.dat   binary
+*.zip   binary
+
+# 字体文件（自备底座的用户可能会放进 fonts/，这些不该进库，但标记一下更保险）
+*.ttf   binary
+*.ttc   binary
+*.otf   binary
