@@ -202,15 +202,6 @@ def make_pack(out_dir, *, message_dat, font_file, font_family="",
                            font_file=font_base, font_family=font_family)
     log("  %s（游戏目录留空，跟着文件夹走）" % kg_deploy.CONFIG_NAME)
 
-    # 4) 启动器配置：game_dir 留空
-    if not game_exe and game_dir and os.path.isdir(game_dir):
-        from . import kg_launch
-        found = kg_launch.find_game_exe(game_dir)
-        game_exe = os.path.basename(found) if found else ""
-    kg_deploy.write_config(folder, game_exe=game_exe, redirect_dir=dirname,
-                           font_file=font_base, font_family=font_family)
-    log("  %s（游戏目录留空，跟着文件夹走）" % kg_deploy.CONFIG_NAME)
-
     # 5) 启动器本体：先落到临时目录，换好图标再进包
     lname = launcher_name or kg_deploy.LAUNCHER_NAME
     dst_launcher = _copy(launcher_exe, os.path.join(folder, lname), log,
