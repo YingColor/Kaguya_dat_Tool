@@ -16,6 +16,7 @@ slotmap*.txt
 build/
 dist/
 *.spec
+venv/
 __pycache__/
 *.py[cod]
 
