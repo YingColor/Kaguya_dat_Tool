@@ -9,3 +9,6 @@
 *.ttf   binary
 *.ttc   binary
 *.otf   binary
+
+# Windows 批处理：必须用 CRLF，否则 GitHub ZIP 下载后 cmd 会解析乱
+*.bat   binary
