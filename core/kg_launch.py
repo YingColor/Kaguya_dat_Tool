@@ -80,11 +80,30 @@ def scan_pe(path):
         return None
 
 
-def find_game_exe(game_dir, hint=None, exclude=("KaguyaEngine_Patch.exe",)):
-    """找出游戏的主程序。优先挑导入了 WINMM.dll 的那个。"""
+def _self_exe():
+    """当前程序自身的真实路径（打包成 exe 后就是那个 exe）。失败返回 None。"""
+    try:
+        return os.path.normcase(os.path.abspath(sys.executable))
+    except Exception:
+        return None
+
+
+def find_game_exe(game_dir, hint=None, exclude=None):
+    """找出游戏的主程序。优先挑导入了 WINMM.dll 的那个。
+
+    除了 ``exclude`` 里列出的名字，还会**自动排除自己** —— 这样即使启动器
+    被改成了别的名字，也不会被当成游戏主程序反复启动。
+    """
+    if exclude is None:
+        exclude = (kg_deploy.LAUNCHER_NAME,)   # 老名字的启动器也不算游戏
+    me = _self_exe()
+
+    def _is_me(path):
+        return bool(me) and os.path.normcase(os.path.abspath(path)) == me
+
     if hint:
         p = hint if os.path.isabs(hint) else os.path.join(game_dir, hint)
-        if os.path.exists(p):
+        if os.path.exists(p) and not _is_me(p):
             return p
     cands = []
     for fn in os.listdir(game_dir):
@@ -93,6 +112,8 @@ def find_game_exe(game_dir, hint=None, exclude=("KaguyaEngine_Patch.exe",)):
         if fn in exclude:
             continue
         p = os.path.join(game_dir, fn)
+        if _is_me(p):
+            continue
         info = scan_pe(p)
         cands.append((fn, p, info, os.path.getsize(p)))
     if not cands:

@@ -25,6 +25,7 @@ from __future__ import annotations
 import os
 import re
 import shutil
+import tempfile
 import zipfile
 
 from . import kg_deploy
@@ -100,35 +101,8 @@ HELP = """KaguyaPatch 汉化包 —— 使用说明
 
 # ---------------------------------------------------------------- 生成
 
-_SIGNATURE = (kg_deploy.LAUNCHER_NAME, "Nepgear.ini",
-              kg_deploy.CONFIG_NAME, "winmm.dll")
-
-
-def _is_ours(folder):
-    """判断这个文件夹是不是我们自己生成的包（避免误删用户的东西）。
-
-    靠内容特征：一个汉化包必然同时有 启动器 + 钩子配置 + 启动器配置 + 钩子。
-    不用额外放标记文件——分享出去的包干净一点。
-    """
-    return all(os.path.exists(os.path.join(folder, n)) for n in _SIGNATURE)
-
-
-def _fresh(folder, overwrite=True, log=print):
-    """准备一个干净的输出文件夹。"""
-    if os.path.exists(folder):
-        if not os.path.isdir(folder):
-            raise FileExistsError("输出位置被一个同名文件占着了：%s" % folder)
-        if not overwrite:
-            raise FileExistsError("这个文件夹已经存在：%s" % folder)
-        if not _is_ours(folder):
-            raise FileExistsError(
-                "这个文件夹已存在，而且不是 KaguyaPatch 生成的：\n%s\n\n"
-                "怕删错你的东西，请换一个输出位置，或者先手动改名/删除。"
-                % folder)
-        shutil.rmtree(folder)
-        log("  清掉旧的汉化包文件夹")
-    os.makedirs(folder, exist_ok=True)
-    return folder
+# 导出时直接把 8 项写进 zip，全程不碰用户选的输出位置 ——
+# 也就不需要判断「这是不是我们的包」，更不会去清空任何目录。
 
 
 def _copy(src, dst, log=None, tag=""):
@@ -143,18 +117,23 @@ def _copy(src, dst, log=None, tag=""):
 
 def make_pack(out_dir, *, message_dat, font_file, font_family="",
               game_dir="", game_exe="", redirect_dir="KaguyaTrans",
-              launcher_exe=None, folder_name="", zip_it=True,
-              overwrite=True, log=print, icon_game_exe=None, icon_image=None):
-    """生成自包含汉化包。返回摘要字典。
+              launcher_exe=None, launcher_name="", folder_name="",
+              zip_it=True, overwrite=False, log=print,
+              icon_game_exe=None, icon_image=None):
+    """生成自包含汉化包，产出**一个 zip**。返回摘要字典。
 
-    out_dir      汉化包放哪儿（里面会新建一个包文件夹，再打一个同名 zip）
-    message_dat  中文 message.dat（第 2 步的产物）
-    font_file    中文字体 ttf（第 2 步的产物）
-    font_family  字体内部名，留空就自己从字体里读
-    game_dir     游戏目录，只用来猜包名和找主程序名，可以留空
-    game_exe     主程序文件名（如 Start.exe），留空就自己找
+    out_dir       汉化包放哪儿（里面会新建一个 <包名>.zip）
+    message_dat   中文 message.dat（第 2 步的产物）
+    font_file     中文字体 ttf（第 2 步的产物）
+    font_family   字体内部名，留空就自己从字体里读
+    game_dir      游戏目录，只用来猜包名和找主程序名，可以留空
+    game_exe      主程序文件名（如 Start.exe），留空就自己找
+    launcher_name 包里那个启动器叫什么；留空用默认名
     icon_game_exe 给启动器套上这个 exe 的图标（游戏图标）
     icon_image    给启动器套上这个图片的图标（自定义）；与上面二选一
+
+    不建中间文件夹：先把内容备到临时目录，压成 zip 落位后删临时目录。
+    这样用户选的输出位置只会被"写一个 zip 文件"碰到，不会被清空。
     """
     out_dir = os.path.abspath(out_dir)
     message_dat = os.path.abspath(message_dat)
@@ -183,11 +162,19 @@ def make_pack(out_dir, *, message_dat, font_file, font_family="",
 
     name = guess_pack_name(game_dir, folder_name)
     os.makedirs(out_dir, exist_ok=True)
-    folder = _fresh(os.path.join(out_dir, name), overwrite=overwrite, log=log)
+    zpath = os.path.join(out_dir, name + ".zip")
+    if os.path.exists(zpath) and not overwrite:
+        raise FileExistsError(
+            "同名汉化包已经存在：\n%s\n\n"
+            "换个名字，或者让它直接覆盖。" % zpath)
 
+    # 内容先备到一个临时目录里，压成 zip 落位后再删掉临时目录。
+    # 这样一来，用户选的输出位置只会被"写一个 zip 文件"碰到，
+    # 不会被清空 —— 也就用不着去猜"这是不是我们的包"了。
+    folder = tempfile.mkdtemp(prefix="kaguya_pack_")
     font_base = os.path.basename(font_file)
     dirname = redirect_dir or "KaguyaTrans"
-    log("生成汉化包：%s" % folder)
+    log("生成汉化包：%s" % zpath)
 
     # 1) 重定向目录：中文文本 + 字体
     rdir = os.path.join(folder, dirname)
@@ -215,10 +202,19 @@ def make_pack(out_dir, *, message_dat, font_file, font_family="",
                            font_file=font_base, font_family=font_family)
     log("  %s（游戏目录留空，跟着文件夹走）" % kg_deploy.CONFIG_NAME)
 
-    # 5) 启动器本体
-    dst_launcher = _copy(launcher_exe,
-                         os.path.join(folder, kg_deploy.LAUNCHER_NAME), log,
-                         "%s（启动器）" % kg_deploy.LAUNCHER_NAME)
+    # 4) 启动器配置：game_dir 留空
+    if not game_exe and game_dir and os.path.isdir(game_dir):
+        from . import kg_launch
+        found = kg_launch.find_game_exe(game_dir)
+        game_exe = os.path.basename(found) if found else ""
+    kg_deploy.write_config(folder, game_exe=game_exe, redirect_dir=dirname,
+                           font_file=font_base, font_family=font_family)
+    log("  %s（游戏目录留空，跟着文件夹走）" % kg_deploy.CONFIG_NAME)
+
+    # 5) 启动器本体：先落到临时目录，换好图标再进包
+    lname = launcher_name or kg_deploy.LAUNCHER_NAME
+    dst_launcher = _copy(launcher_exe, os.path.join(folder, lname), log,
+                         "%s（启动器）" % lname)
 
     # 5.1) 启动器图标：游戏图标 / 自定义（不给就保持启动器自带的样子）
     kg_deploy.apply_launcher_icon(dst_launcher, game_exe=icon_game_exe,
@@ -228,21 +224,17 @@ def make_pack(out_dir, *, message_dat, font_file, font_family="",
     with open(os.path.join(folder, README_NAME), "w", encoding="utf-8") as fh:
         fh.write(HELP)
 
-    files = []
-    for root, _dirs, names in os.walk(folder):
-        for fn in names:
-            files.append(os.path.relpath(os.path.join(root, fn), folder))
+    # 7) 整体压成 zip 落位，完了删掉临时目录
+    try:
+        zip_folder(folder, zpath, base_in_zip=name)
+        with zipfile.ZipFile(zpath) as z:
+            files = sorted(i.filename for i in z.infolist())
+    finally:
+        shutil.rmtree(folder, ignore_errors=True)
 
-    zpath = ""
-    if zip_it:
-        zpath = os.path.join(out_dir, name + ".zip")
-        zip_folder(folder, zpath)
-        log("已打包 zip：%s" % zpath)
-
-    log("完成。把「%s」里的东西全部复制到游戏目录，"
-        "双击 %s 就能玩中文版。" % (name, kg_deploy.LAUNCHER_NAME))
-    return {"folder": folder, "name": name, "zip": zpath,
-            "files": sorted(files), "font": font_base,
+    log("已完成：%s" % zpath)
+    return {"folder": None, "name": name, "zip": zpath,
+            "files": files, "font": font_base,
             "family": font_family, "game_exe": game_exe}
 
 
@@ -264,8 +256,8 @@ def zip_folder(folder, zip_path, base_in_zip=None):
 # ---------------------------------------------------------------- 从成品反推
 
 def pack_from_game(game_dir, out_dir, *, redirect_dir="KaguyaTrans",
-                   folder_name="", zip_it=True, overwrite=True, log=print,
-                   icon_game_exe=None, icon_image=None):
+                   folder_name="", zip_it=True, overwrite=False, log=print,
+                   icon_game_exe=None, icon_image=None, launcher_name=""):
     """「我游戏目录里已经装好了，照这个样子导出成包」。
 
     直接从游戏目录里把已经铺好的东西收进包里，不需要汉化数据目录。
@@ -307,5 +299,6 @@ def pack_from_game(game_dir, out_dir, *, redirect_dir="KaguyaTrans",
                      game_dir=game_dir,
                      game_exe=os.path.basename(exe) if exe else "",
                      redirect_dir=redirect_dir, folder_name=folder_name,
+                     launcher_name=launcher_name,
                      zip_it=zip_it, overwrite=overwrite, log=log,
                      icon_game_exe=icon_game_exe, icon_image=icon_image)

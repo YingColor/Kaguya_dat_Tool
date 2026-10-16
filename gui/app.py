@@ -678,16 +678,19 @@ class App(tk.Tk):
         self.v_pdata = tk.StringVar()
         self.v_pname = tk.StringVar(value="KaguyaPatch汉化包_中文版")
         self.v_pexe = tk.StringVar(value="Start.exe")
+        self.v_plauncher = tk.StringVar(value=kg_deploy.LAUNCHER_NAME)
         self.v_pout = tk.StringVar()
 
         self._row(f, "汉化数据文件夹", self.v_pdata, True,
                   tip="第 2 步的输出：里面有 message.dat 和 .ttf")
         self._row(f, "汉化包名字", self.v_pname, False, kind="text",
-                  tip="文件夹和压缩包都用这个名字，随便改")
+                  tip="压缩包用这个名字，随便改")
         self._row(f, "要启动的 exe", self.v_pexe, False, kind="text",
                   tip="游戏主程序名，一般就是 Start.exe")
+        self._row(f, "启动器文件名", self.v_plauncher, False, kind="text",
+                  tip="包里那个启动器叫什么；留空就用默认名")
         self._row(f, "放哪儿", self.v_pout, True,
-                  tip="汉化包生成到这个文件夹里")
+                  tip="汉化包（一个 zip）生成到这个文件夹里")
 
         ttk.Label(f, foreground="#888", justify="left", text=(
             "exe 名字填错也不致命：拿包的人双击启动器时，它自己还会再找一遍。\n"
@@ -720,9 +723,10 @@ class App(tk.Tk):
             self.icon_pack.autofill()
             icon_game_exe, icon_image = self.icon_pack.collect()
             return (data, name, exe, os.path.normpath(out),
+                    self.v_plauncher.get().strip(),
                     icon_game_exe, icon_image)
 
-        def work(data, name, exe, out, icon_game_exe, icon_image):
+        def work(data, name, exe, out, lname, icon_game_exe, icon_image):
             fonts = [fn for fn in os.listdir(data)
                      if fn.lower().endswith(".ttf")]
             if not exe.lower().endswith(".exe"):
@@ -733,6 +737,7 @@ class App(tk.Tk):
                 out, message_dat=os.path.join(data, "message.dat"),
                 font_file=os.path.join(data, fonts[0]),
                 game_exe=os.path.basename(exe), folder_name=name,
+                launcher_name=lname,
                 log=self._say, icon_game_exe=icon_game_exe,
                 icon_image=icon_image)
 
@@ -745,12 +750,9 @@ class App(tk.Tk):
     def _pack_done(self, res=None):
         res = res or {}
         zip_path = res.get("zip") or ""
-        body = ("汉化包已经做好了：\n\n"
-                "%s\n" % (res.get("folder") or ""))
-        if zip_path:
-            body += "\n可以直接发出去的压缩包：\n%s\n" % zip_path
+        body = "汉化包已经做好了：\n\n%s\n" % zip_path
         body += ("\n怎么用：解压后把里面的东西全部复制进游戏目录"
-                 "（有 Start.exe 的那一层），双击 KaguyaEngine_Patch.exe。\n"
+                 "（有 Start.exe 的那一层），双击里头的启动器。\n"
                  "这个包是自包含的，别人不需要这个工具。")
         messagebox.showinfo("汉化包做好了", body)
 

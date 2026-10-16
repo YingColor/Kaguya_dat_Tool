@@ -8,12 +8,17 @@
     python kaguya_patch.py launch  <游戏目录> [主程序名]
     python kaguya_patch.py uninstall <游戏目录>
     python kaguya_patch.py check   <游戏目录>
-    python kaguya_patch.py release <游戏目录> <汉化数据目录> <输出目录> [--no-zip] [--name 名字] [图标选项]
-    python kaguya_patch.py pack    <游戏目录> <输出目录> [--no-zip] [--name 名字] [图标选项]
+    python kaguya_patch.py release <游戏目录> <汉化数据目录> <输出目录> [打包选项] [图标选项]
+    python kaguya_patch.py pack    <游戏目录> <输出目录> [打包选项] [图标选项]
+
+打包选项（作用在上面的 release / pack 上）：
+    --name <名字>              包名，同时也是 zip 的名字；不写就自动猜
+    --launcher-name <文件名>    包里那个启动器叫什么；不写用默认名
+    --overwrite                同名 zip 已经存在时直接覆盖（不写＝报错拒绝）
 
 图标选项（给启动器换图标，可省略；省略＝用启动器自带的样子）：
-    --icon-game <Start.exe路径>   用这个程序里的图标（一般就是游戏主程序）
-    --icon-image <图片路径>       用这张图（.ico，或 png/jpg 等）
+    --icon-game <主程序路径>    用这个程序里的图标（一般就是游戏主程序）
+    --icon-image <图片路径>     用这张图（.ico，或 png/jpg 等）
 
 release 从「汉化数据目录」做汉化包；pack 从「已经装好的游戏目录」直接收一份。
 两种都是自包含的，别人拿到复制进干净的原版游戏目录就能玩。
@@ -148,9 +153,11 @@ def _font_family(font):
 
 
 def _pack_opts(opts):
-    """从命令行尾巴里挑出 --no-zip / --name xxx 以及图标选项。"""
-    d = {"zip_it": "--no-zip" not in opts,
-         "folder_name": _opt_value(opts, "--name")}
+    """从命令行尾巴里挑出 --name / --launcher-name / --overwrite 以及图标选项。"""
+    d = {"zip_it": True,
+         "folder_name": _opt_value(opts, "--name"),
+         "launcher_name": _opt_value(opts, "--launcher-name"),
+         "overwrite": "--overwrite" in opts}
     d.update(_icon_opts(opts))
     return d
 
@@ -170,14 +177,11 @@ def _opt_value(opts, key, default=""):
 
 
 def _report(res):
-    print("汉化包已生成：%s" % res["folder"])
+    print("汉化包已生成：%s" % res["zip"])
     for fn in res["files"]:
         print("   " + fn)
-    if res.get("zip"):
-        mb = os.path.getsize(res["zip"]) / 1048576.0
-        print("压缩包：%s（%.1f MB）" % (res["zip"], mb))
     print("这个包是自包含的：别人把它解压，里面的东西全部复制到干净的原版")
-    print("游戏目录，双击 KaguyaEngine_Patch.exe 就能玩中文版。")
+    print("游戏目录，双击里头的启动器就能玩中文版。")
 
 
 def cmd_release(game, data, out, *opts):
