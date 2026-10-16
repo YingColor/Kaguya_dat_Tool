@@ -64,6 +64,22 @@
 ### 图形界面
 双击 `KaguyaPatch.exe`，五个标签页一一对应上面五步，全部中文，鼠标点就行。
 
+### 启动器图标（可选）
+
+第 3 步「装进游戏」和第 5 步「导出汉化包」都有一个 **启动器图标** 选项，
+决定铺出来的 `KaguyaEngine_Patch.exe` 显示成什么图标，三选一：
+
+| 选项 | 效果 |
+|---|---|
+| **使用游戏图标**（默认） | 从游戏主程序（`Start.exe`）里读出它自己的图标，套到启动器上 |
+| **自定义图标** | 用你自己的图片：`.ico` 直接能用，`png` / `jpg` / `bmp` / `gif` 也能（工具现场转成多尺寸 `.ico`） |
+| **不带图标** | 不套，保持启动器本身的样子 |
+
+整套逻辑在 `core/kg_icon.py`，纯 `ctypes` 直接读写 PE 的图标资源
+（`BeginUpdateResource` / `UpdateResource`），不需要额外工具或编译器。
+它只改启动器那份 exe 的资源，**游戏主程序、游戏目录里的任何文件都不碰**。
+命令行等价参数是 `--icon-game <exe>` / `--icon-image <图片>`。
+
 ### 导出汉化包（把自己的汉化分享出去）
 
 第 5 页那个「**导出汉化包**」按钮，会生成一整套**自包含**的文件。
@@ -129,6 +145,9 @@ python kaguya_patch.py release  <游戏目录> <汉化数据目录> <输出目�
 python kaguya_patch.py release  <游戏目录> <汉化数据目录> <输出目录> --no-zip  :: 不要 zip
 python kaguya_patch.py release  <游戏目录> <汉化数据目录> <输出目录> --name 名字
 python kaguya_patch.py pack     <游戏目录> <输出目录>   :: 从已装好的游戏目录直接收一份
+:: 换启动器图标（install / release / pack 都支持，不写＝保持启动器自带样子）
+... install  <游戏目录> <汉化数据目录> --icon-game <Start.exe>   :: 用游戏图标
+... install  <游戏目录> <汉化数据目录> --icon-image <图片>       :: 用自定义图片
 ```
 
 ---
@@ -233,13 +252,14 @@ Kaguya_dat_Tool/
     kg_pack.py     一键打包：原版 dat + 译文 -> dat + 字体
     kg_deploy.py   把钩子 / 配置 / 数据 / 启动器装进游戏目录
     kg_release.py  导出「汉化包」（自包含，可直接分享，自动打 zip）
+    kg_icon.py     读写 PE 图标资源：给启动器换图标（纯 ctypes）
     kg_launch.py   转区启动 + 中文路径自动绕行 + PE 导入表扫描
   launcher/
     launcher.py    KaguyaEngine_Patch.exe 的源程序
   gui/
     app.py         KaguyaPatch.exe 的源程序（tkinter，五个标签页）
   assets/
-    app.ico        图标（由 build.py 现场绘制）
+    icon/          放一个图标文件，重新打包就会变成 exe 的默认图标
     nepgear/       开源钩子 Nepgear 的编译产物（winmm.dll，MIT）+ 配置模板
     le/            绿色版 Locale Emulator 的运行时（LGPL-3.0）
   fonts/
@@ -267,6 +287,11 @@ Kaguya_dat_Tool/
 python build.py            :: 打包全部
 python build.py launcher   :: 只打包启动器
 ```
+
+> **想给打包出的 exe 换个内置图标**：把一个图标文件丢进 `assets/icon/`
+> （优先用 `icon.ico`；放 `png` / `jpg` 也行，会自动转，需要 Pillow），
+> 重新打包即可。不放就打出不带图标的 exe —— 用户之后在「装进游戏 / 导出汉化包」
+> 里再自己选游戏图标或自定义图片，两者互不冲突。
 
 ---
 

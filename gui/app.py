@@ -36,6 +36,128 @@ def read_name_from_file(path):
     return read_name(f.get("name"), 1) or FONT_FAMILY
 
 
+class IconPicker:
+    """「启动器图标」选择控件，页 3 和页 5 共用。
+
+    三选一：使用游戏图标（默认）/ 自定义图标 / 不带图标。
+    对外就一个 collect()，返回 (game_exe, image_file) 给 kg_icon 用。
+    """
+
+    MODES = [("game", "使用游戏图标（推荐）"),
+             ("custom", "自定义图标"),
+             ("none", "不带图标（用启动器自带的样子）")]
+
+    def __init__(self, parent, game_dir_getter=None):
+        self.game_dir_getter = game_dir_getter
+        self.mode = tk.StringVar(value="game")
+        self.v_exe = tk.StringVar()
+        self.v_img = tk.StringVar()
+
+        f = ttk.LabelFrame(parent, text="启动器图标", padding=8)
+        f.pack(fill="x", pady=(10, 0))
+
+        for val, text in self.MODES:
+            ttk.Radiobutton(f, text=text, value=val, variable=self.mode,
+                            command=self._sync).pack(anchor="w")
+
+        self.row_exe = ttk.Frame(f)
+        self.row_exe.pack(fill="x", padx=(22, 0), pady=(2, 0))
+        ttk.Label(self.row_exe, text="游戏启动程序", width=14,
+                  anchor="w").pack(side="left")
+        ttk.Entry(self.row_exe, textvariable=self.v_exe).pack(
+            side="left", fill="x", expand=True)
+        ttk.Button(self.row_exe, text="浏览…", width=8,
+                   command=self._pick_exe).pack(side="left", padx=(6, 0))
+
+        self.row_img = ttk.Frame(f)
+        self.row_img.pack(fill="x", padx=(22, 0), pady=(2, 0))
+        ttk.Label(self.row_img, text="图标图片", width=14,
+                  anchor="w").pack(side="left")
+        ttk.Entry(self.row_img, textvariable=self.v_img).pack(
+            side="left", fill="x", expand=True)
+        ttk.Button(self.row_img, text="浏览…", width=8,
+                   command=self._pick_img).pack(side="left", padx=(6, 0))
+
+        ttk.Label(f, foreground="#888", justify="left", text=(
+            "游戏图标＝从你选的启动程序（Start.exe）里读出它的图标，套到启动器上；\n"
+            "自定义＝用你自己的图片（.ico 或 png / jpg 等）；"
+            "不带＝保持启动器本身的样子。")
+        ).pack(anchor="w", pady=(4, 0))
+        self._sync()
+
+    def _sync(self):
+        m = self.mode.get()
+        self._enable(self.row_exe, m == "game")
+        self._enable(self.row_img, m == "custom")
+
+    def _enable(self, row, on):
+        state = "normal" if on else "disabled"
+        for w in row.winfo_children():
+            try:
+                w.configure(state=state)
+            except Exception:
+                pass
+
+    def _pick_exe(self):
+        start = os.path.dirname(self.v_exe.get().strip())
+        opts = {"title": "选游戏启动程序（Start.exe）",
+                "filetypes": [("程序", "*.exe"), ("所有文件", "*.*")]}
+        if start and os.path.isdir(start):
+            opts["initialdir"] = start
+        p = filedialog.askopenfilename(**opts)
+        if p:
+            self.v_exe.set(os.path.normpath(p))
+
+    def _pick_img(self):
+        start = os.path.dirname(self.v_img.get().strip())
+        opts = {"title": "选图标图片",
+                "filetypes": [("图标/图片", "*.ico *.png *.jpg *.jpeg *.bmp *.gif"),
+                              ("所有文件", "*.*")]}
+        if start and os.path.isdir(start):
+            opts["initialdir"] = start
+        p = filedialog.askopenfilename(**opts)
+        if p:
+            self.v_img.set(os.path.normpath(p))
+
+    def autofill(self):
+        """按游戏目录自动补上「游戏启动程序」（没填过才补）。"""
+        if self.v_exe.get().strip() or not self.game_dir_getter:
+            return
+        try:
+            gdir = self.game_dir_getter()
+        except Exception:
+            gdir = ""
+        if not gdir or not os.path.isdir(gdir):
+            return
+        try:
+            exe = kg_launch.find_game_exe(gdir)
+        except Exception:
+            exe = None
+        if exe:
+            self.v_exe.set(os.path.normpath(exe))
+
+    def collect(self):
+        """返回 (game_exe, image_file)；选「不带」返回 (None, None)。"""
+        m = self.mode.get()
+        if m == "none":
+            return (None, None)
+        if m == "game":
+            exe = self.v_exe.get().strip()
+            if not exe:
+                raise ValueError(
+                    "选了「使用游戏图标」，请先指定游戏启动程序（Start.exe）。\n"
+                    "点那一行的「浏览…」选，或先把上面的「游戏目录」填上。")
+            if not os.path.isfile(exe):
+                raise ValueError("找不到这个游戏启动程序：\n%s" % exe)
+            return (exe, None)
+        img = self.v_img.get().strip()
+        if not img:
+            raise ValueError("选了「自定义图标」，请先指定图片文件。")
+        if not os.path.isfile(img):
+            raise ValueError("找不到这个图片文件：\n%s" % img)
+        return (None, img)
+
+
 class App(tk.Tk):
     def __init__(self):
         super().__init__()
@@ -478,6 +600,9 @@ class App(tk.Tk):
             "顺便给包起个名。工具从头到尾不会改动游戏里的任何文件。")
         ).pack(anchor="w", pady=(2, 0))
 
+        self.icon_install = IconPicker(
+            f, game_dir_getter=lambda: self.v_igame.get().strip())
+
         def collect():
             game = self.v_igame.get().strip()
             data = self.v_idata.get().strip()
@@ -493,14 +618,19 @@ class App(tk.Tk):
             if not fonts:
                 raise ValueError("这个文件夹里没有 .ttf 字体")
             exe = kg_launch.find_game_exe(game)
+            self.icon_install.autofill()
+            icon_game_exe, icon_image = self.icon_install.collect()
             return (game, data, dat, os.path.join(data, fonts[0]),
-                    os.path.basename(exe) if exe else "")
+                    os.path.basename(exe) if exe else "",
+                    icon_game_exe, icon_image)
 
-        def work(game, data, dat, font, game_exe):
+        def work(game, data, dat, font, game_exe, icon_game_exe, icon_image):
             family = read_name_from_file(font)
             res = kg_deploy.deploy(game, message_dat=dat, font_file=font,
                                    font_family=family, redirect_dir=REDIRECT,
-                                   game_exe=game_exe, log=self._say)
+                                   game_exe=game_exe, log=self._say,
+                                   icon_game_exe=icon_game_exe,
+                                   icon_image=icon_image)
             if game_exe:
                 self._say("游戏主程序：%s" % game_exe)
             else:
@@ -564,6 +694,9 @@ class App(tk.Tk):
             "包里不含游戏本体、不含运行日志，也不含任何本机路径。")
         ).pack(anchor="w", pady=(2, 0))
 
+        self.icon_pack = IconPicker(
+            f, game_dir_getter=lambda: self.v_igame.get().strip())
+
         def collect():
             data = self.v_pdata.get().strip()
             name = self.v_pname.get().strip()
@@ -584,9 +717,12 @@ class App(tk.Tk):
                 raise ValueError("填一下要启动的 exe 名字（一般 Start.exe）")
             if not out:
                 raise ValueError("选个「放哪儿」——汉化包要生成到哪个文件夹")
-            return (data, name, exe, os.path.normpath(out))
+            self.icon_pack.autofill()
+            icon_game_exe, icon_image = self.icon_pack.collect()
+            return (data, name, exe, os.path.normpath(out),
+                    icon_game_exe, icon_image)
 
-        def work(data, name, exe, out):
+        def work(data, name, exe, out, icon_game_exe, icon_image):
             fonts = [fn for fn in os.listdir(data)
                      if fn.lower().endswith(".ttf")]
             if not exe.lower().endswith(".exe"):
@@ -597,7 +733,8 @@ class App(tk.Tk):
                 out, message_dat=os.path.join(data, "message.dat"),
                 font_file=os.path.join(data, fonts[0]),
                 game_exe=os.path.basename(exe), folder_name=name,
-                log=self._say)
+                log=self._say, icon_game_exe=icon_game_exe,
+                icon_image=icon_image)
 
         ttk.Button(f, text="导出汉化包", style="Big.TButton",
                    command=lambda: self._task(collect, work, self._pack_done,

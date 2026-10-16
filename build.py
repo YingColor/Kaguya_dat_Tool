@@ -18,10 +18,13 @@ HERE = os.path.dirname(os.path.abspath(__file__))
 DIST = os.path.join(HERE, "dist")
 BUILD = os.path.join(HERE, "build")
 ASSETS = os.path.join(HERE, "assets")
+# 图标就放这个文件夹：丢一个 .ico 进来再重新打包，exe 就带上它。
+# 留空 = 打出来的 exe 不带图标（源码里不再内置任何图标）。
+ICON_DIR = os.path.join(ASSETS, "icon")
 
 HIDDEN = ["core", "core.kg_dat", "core.kg_slot", "core.kg_ttf", "core.kg_font",
           "core.kg_text", "core.kg_pack", "core.kg_deploy", "core.kg_release",
-          "core.kg_launch"]
+          "core.kg_launch", "core.kg_icon"]
 
 TARGETS = {
     "launcher": {
@@ -34,28 +37,62 @@ TARGETS = {
         # 把启动器一起打进去，装进游戏时直接铺到游戏目录，用户不用手动复制
         "extra_data": [os.path.join(HERE, "launcher", "KaguyaEngine_Patch.exe")
                        + os.pathsep + "launcher"],
+        # GUI 要能把 png/jpg 转成图标，所以内置 Pillow
+        "hidden": ["PIL", "PIL.Image"],
     },
     "cli": {
         "name": "KaguyaPatchCLI",
         "script": os.path.join(HERE, "kaguya_patch.py"),
         "extra_data": [os.path.join(HERE, "launcher", "KaguyaEngine_Patch.exe")
                        + os.pathsep + "launcher"],
+        "hidden": ["PIL", "PIL.Image"],
     },
 }
 
+_ICON_EXTS = (".ico", ".png", ".jpg", ".jpeg", ".bmp", ".gif")
 
-def make_ico(path):
-    """画一个简单的图标（没有就跳过）。"""
-    try:
-        from PIL import Image, ImageDraw
-        img = Image.new("RGBA", (256, 256), (0, 0, 0, 0))
-        d = ImageDraw.Draw(img)
-        d.rounded_rectangle([16, 16, 240, 240], 40, fill=(46, 84, 150, 255))
-        d.text((70, 96), "汉", fill=(255, 255, 255, 255))
-        img.save(path)
-        return path
-    except Exception:
+
+def find_icon():
+    """从 assets/icon/ 里挑一个图标。
+
+    优先叫 `icon.ico` 的，其次该目录里第一个图片文件。都没有就返回 None
+    —— 这时打出来的 exe 不带图标。放好图标后重新运行本脚本即可生效。
+    """
+    if not os.path.isdir(ICON_DIR):
         return None
+    files = [f for f in sorted(os.listdir(ICON_DIR))
+             if os.path.splitext(f)[1].lower() in _ICON_EXTS]
+    if not files:
+        return None
+    for f in files:
+        if f.lower() == "icon.ico":
+            return os.path.join(ICON_DIR, f)
+    return os.path.join(ICON_DIR, files[0])
+
+
+def _to_ico(path, workdir):
+    """保证拿到的是 .ico：不是就用 Pillow 转一个临时的。失败返回 None。"""
+    if path.lower().endswith(".ico"):
+        return path
+    try:
+        from PIL import Image
+    except Exception:
+        print("！%s 不是 .ico，当前环境又没有 Pillow，转不了 → 本次不带图标"
+              % os.path.basename(path))
+        return None
+    im = Image.open(path).convert("RGBA")
+    w, h = im.size
+    side = max(w, h)
+    if (w, h) != (side, side):
+        canvas = Image.new("RGBA", (side, side), (0, 0, 0, 0))
+        canvas.paste(im, ((side - w) // 2, (side - h) // 2))
+        im = canvas
+    want = [16, 24, 32, 48, 64, 128, 256]
+    sizes = [s for s in want if s <= side] or [want[-1]]
+    os.makedirs(workdir, exist_ok=True)
+    out = os.path.join(workdir, "_icon_from_source.ico")
+    im.save(out, format="ICO", sizes=[(s, s) for s in sizes])
+    return out
 
 
 def build_one(key, onefile=True, windowed=True):
@@ -69,7 +106,7 @@ def build_one(key, onefile=True, windowed=True):
             "--add-data", "%s%sassets" % (ASSETS, os.pathsep),
             "--onefile" if onefile else "--onedir",
             "--noconsole" if windowed else "--console"]
-    for h in HIDDEN:
+    for h in HIDDEN + t.get("hidden", []):
         args += ["--hidden-import", h]
     for extra in t.get("extra_data", []):
         src = extra.split(os.pathsep)[0]
@@ -77,11 +114,17 @@ def build_one(key, onefile=True, windowed=True):
             print("跳过缺失的资源：%s" % src)
             continue
         args += ["--add-data", extra]
-    ico = os.path.join(ASSETS, "app.ico")
-    if not os.path.exists(ico):
-        ico = make_ico(ico)
+    ico = find_icon()
+    if ico:
+        ico = _to_ico(ico, BUILD)
     if ico:
         args += ["--icon", ico]
+        print("使用图标：%s" % ico)
+    else:
+        # 不给 --icon 的话 PyInstaller 会塞它自己的默认图标；
+        # 显式 NONE 才是真正的「不带图标」。
+        args += ["--icon", "NONE"]
+        print("（assets/icon/ 里没有图标，本次打出的 exe 不带图标）")
     args.append(t["script"])
     print("=" * 70)
     print("打包 %s" % t["name"])

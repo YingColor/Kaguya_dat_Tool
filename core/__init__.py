@@ -10,11 +10,12 @@
     kg_deploy   把钩子/配置/数据装进游戏目录
     kg_release  导出「汉化包」（一整套自包含文件，可直接分享）
     kg_launch   内置 Locale Emulator 转区启动 + 中文路径自动绕行
+    kg_icon     给 exe 换图标（游戏图标 / 自定义 / 不带）
 """
 
-from . import (kg_dat, kg_deploy, kg_font, kg_launch, kg_pack, kg_release,
-               kg_slot, kg_text, kg_ttf)
+from . import (kg_dat, kg_deploy, kg_font, kg_icon, kg_launch, kg_pack,
+               kg_release, kg_slot, kg_text, kg_ttf)
 
 __version__ = "1.1.0"
 __all__ = ["kg_dat", "kg_slot", "kg_ttf", "kg_font", "kg_text", "kg_pack",
-           "kg_deploy", "kg_release", "kg_launch", "__version__"]
+           "kg_deploy", "kg_release", "kg_launch", "kg_icon", "__version__"]

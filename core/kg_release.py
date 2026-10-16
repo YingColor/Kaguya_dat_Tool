@@ -144,7 +144,7 @@ def _copy(src, dst, log=None, tag=""):
 def make_pack(out_dir, *, message_dat, font_file, font_family="",
               game_dir="", game_exe="", redirect_dir="KaguyaTrans",
               launcher_exe=None, folder_name="", zip_it=True,
-              overwrite=True, log=print):
+              overwrite=True, log=print, icon_game_exe=None, icon_image=None):
     """生成自包含汉化包。返回摘要字典。
 
     out_dir      汉化包放哪儿（里面会新建一个包文件夹，再打一个同名 zip）
@@ -153,6 +153,8 @@ def make_pack(out_dir, *, message_dat, font_file, font_family="",
     font_family  字体内部名，留空就自己从字体里读
     game_dir     游戏目录，只用来猜包名和找主程序名，可以留空
     game_exe     主程序文件名（如 Start.exe），留空就自己找
+    icon_game_exe 给启动器套上这个 exe 的图标（游戏图标）
+    icon_image    给启动器套上这个图片的图标（自定义）；与上面二选一
     """
     out_dir = os.path.abspath(out_dir)
     message_dat = os.path.abspath(message_dat)
@@ -214,8 +216,13 @@ def make_pack(out_dir, *, message_dat, font_file, font_family="",
     log("  %s（游戏目录留空，跟着文件夹走）" % kg_deploy.CONFIG_NAME)
 
     # 5) 启动器本体
-    _copy(launcher_exe, os.path.join(folder, kg_deploy.LAUNCHER_NAME), log,
-          "%s（启动器）" % kg_deploy.LAUNCHER_NAME)
+    dst_launcher = _copy(launcher_exe,
+                         os.path.join(folder, kg_deploy.LAUNCHER_NAME), log,
+                         "%s（启动器）" % kg_deploy.LAUNCHER_NAME)
+
+    # 5.1) 启动器图标：游戏图标 / 自定义（不给就保持启动器自带的样子）
+    kg_deploy.apply_launcher_icon(dst_launcher, game_exe=icon_game_exe,
+                                  image_file=icon_image, log=log)
 
     # 6) 使用说明
     with open(os.path.join(folder, README_NAME), "w", encoding="utf-8") as fh:
@@ -257,7 +264,8 @@ def zip_folder(folder, zip_path, base_in_zip=None):
 # ---------------------------------------------------------------- 从成品反推
 
 def pack_from_game(game_dir, out_dir, *, redirect_dir="KaguyaTrans",
-                   folder_name="", zip_it=True, overwrite=True, log=print):
+                   folder_name="", zip_it=True, overwrite=True, log=print,
+                   icon_game_exe=None, icon_image=None):
     """「我游戏目录里已经装好了，照这个样子导出成包」。
 
     直接从游戏目录里把已经铺好的东西收进包里，不需要汉化数据目录。
@@ -293,8 +301,11 @@ def pack_from_game(game_dir, out_dir, *, redirect_dir="KaguyaTrans",
         ttf = os.path.join(rdir, fonts[0])
 
     exe = kg_launch.find_game_exe(game_dir)
+    if icon_game_exe is None and not icon_image and exe:
+        icon_game_exe = exe          # 「照游戏这个样子」时默认套游戏图标
     return make_pack(out_dir, message_dat=msgdat, font_file=ttf,
                      game_dir=game_dir,
                      game_exe=os.path.basename(exe) if exe else "",
                      redirect_dir=redirect_dir, folder_name=folder_name,
-                     zip_it=zip_it, overwrite=overwrite, log=log)
+                     zip_it=zip_it, overwrite=overwrite, log=log,
+                     icon_game_exe=icon_game_exe, icon_image=icon_image)

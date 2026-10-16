@@ -7,8 +7,11 @@ REM        KaguyaEngine_Patch.exe  （启动器）
 REM        KaguyaPatch.exe         （图形界面）
 REM        KaguyaPatchCLI.exe      （命令行）
 REM
-REM  用法：双击本文件即可。首次运行会自己建虚拟环境并安装 PyInstaller，
-REM        之后只要双击就行，几秒搞定。
+REM  用法：双击本文件即可。首次运行会自己建虚拟环境并安装 PyInstaller 和
+REM        Pillow，之后只要双击就行，几秒搞定。
+REM
+REM  想给 exe 换图标：把你的图标放进 assets\icon\（命名 icon.ico 最省事），
+REM        再双击本脚本重新打包即可；该文件夹为空时 exe 不带图标。
 REM
 REM  前提：电脑已装 Python 3.11（含 tcl/tk）。没装运行会提示你，
 REM        去 https://www.python.org/downloads/ 装，安装时务必勾选：
@@ -39,10 +42,10 @@ if not exist venv (
 )
 
 REM --- 第 3 步：激活 venv 并安装打包依赖 ---
-echo [2/4] 安装打包依赖 PyInstaller ...
+echo [2/4] 安装打包依赖 PyInstaller、Pillow ...
 call venv\Scripts\activate.bat
 python -m pip install --upgrade pip >nul 2>nul
-pip install pyinstaller
+pip install pyinstaller pillow
 
 REM --- 第 4 步：确认 tkinter 可用（图形界面打包必须有它）---
 python -c "import tkinter" >nul 2>nul

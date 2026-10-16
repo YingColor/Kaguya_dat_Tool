@@ -30,6 +30,26 @@ def _assets_dir():
     return cands[-1]
 
 
+def apply_launcher_icon(exe, *, game_exe=None, image_file=None, log=print):
+    """给启动器副本换图标。game_exe / image_file 都不给 = 不动。
+
+    单个失败不致命：图标只是好看，换不上不该让整个安装/导出失败。
+    返回 True/False 表示有没有真的换。
+    """
+    if not (game_exe or image_file):
+        return False
+    if not os.path.exists(exe):
+        return False
+    try:
+        from . import kg_icon
+        kg_icon.set_exe_icon(exe, game_exe=game_exe, image_file=image_file)
+    except Exception as e:
+        log("  ⚠ 换图标没成功（不影响使用）：%s" % e)
+        return False
+    log("  已给启动器换上%s图标" % ("游戏" if game_exe else "自定义"))
+    return True
+
+
 HERE = os.path.dirname(os.path.abspath(__file__))
 ASSETS = _assets_dir()
 NEPGEAR_DIR = os.path.join(ASSETS, "nepgear")
@@ -45,7 +65,7 @@ LE_PROFILE_JA = "8f4c8cb4-c323-4bd4-9025-bc4ecffa08b6"
 
 __all__ = ["deploy", "uninstall", "make_config", "write_config",
            "read_ini_any", "write_ini_utf16", "set_ini_value",
-           "build_nepgear_ini", "find_launcher_exe",
+           "build_nepgear_ini", "find_launcher_exe", "apply_launcher_icon",
            "LE_DIR", "ASSETS", "LAUNCHER_NAME", "CONFIG_NAME"]
 
 
@@ -194,7 +214,7 @@ def _copy(src, dst, log, tag):
 
 def deploy(game_dir, *, message_dat, font_file, font_family,
            redirect_dir="KaguyaTrans", game_exe="", log=print, arch=32,
-           launcher_exe=None):
+           launcher_exe=None, icon_game_exe=None, icon_image=None):
     """把钩子 + 配置 + 数据 + 启动器装进游戏目录。返回摘要。"""
     game_dir = os.path.abspath(game_dir)
     if not os.path.isdir(game_dir):
@@ -232,6 +252,10 @@ def deploy(game_dir, *, message_dat, font_file, font_family,
             log("  已铺好启动器，以后双击它就能玩中文版")
     else:
         log("  （没找到 %s，可稍后手动复制过去）" % LAUNCHER_NAME)
+
+    # 启动器图标：游戏图标 / 自定义（不给就保持启动器自带的样子）
+    apply_launcher_icon(dst_launcher, game_exe=icon_game_exe,
+                        image_file=icon_image, log=log)
 
     # 启动器配置：game_dir 留空，启动器按自身所在目录找游戏
     write_config(game_dir, game_exe=game_exe, redirect_dir=redirect_dir,

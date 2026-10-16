@@ -4,12 +4,16 @@
     python kaguya_patch.py extract <message.dat> <译文.txt> [--plain] [--no-nl]
     python kaguya_patch.py build   <原版message.dat> <译文.txt> <输出目录> [底座字体]
     python kaguya_patch.py fonts
-    python kaguya_patch.py install <游戏目录> <汉化数据目录> [重定向目录名]
+    python kaguya_patch.py install <游戏目录> <汉化数据目录> [重定向目录名] [图标选项]
     python kaguya_patch.py launch  <游戏目录> [主程序名]
     python kaguya_patch.py uninstall <游戏目录>
     python kaguya_patch.py check   <游戏目录>
-    python kaguya_patch.py release <游戏目录> <汉化数据目录> <输出目录> [--no-zip] [--name 名字]
-    python kaguya_patch.py pack    <游戏目录> <输出目录> [--no-zip] [--name 名字]
+    python kaguya_patch.py release <游戏目录> <汉化数据目录> <输出目录> [--no-zip] [--name 名字] [图标选项]
+    python kaguya_patch.py pack    <游戏目录> <输出目录> [--no-zip] [--name 名字] [图标选项]
+
+图标选项（给启动器换图标，可省略；省略＝用启动器自带的样子）：
+    --icon-game <Start.exe路径>   用这个程序里的图标（一般就是游戏主程序）
+    --icon-image <图片路径>       用这张图（.ico，或 png/jpg 等）
 
 release 从「汉化数据目录」做汉化包；pack 从「已经装好的游戏目录」直接收一份。
 两种都是自包含的，别人拿到复制进干净的原版游戏目录就能玩。
@@ -72,13 +76,17 @@ def cmd_build(src, txt, out, *rest):
     kg_pack.build(src, txt, out, base_font=base)
 
 
-def cmd_install(game, data, redirect="KaguyaTrans"):
+def cmd_install(game, data, *opts):
+    redirect = "KaguyaTrans"
+    if opts and not opts[0].startswith("--"):   # 兼容旧用法：第三个数是重定向目录名
+        redirect, opts = opts[0], opts[1:]
     dat, font = _pick_data(data)
     family = _font_family(font)
     exe = kg_launch.find_game_exe(game)
     kg_deploy.deploy(game, message_dat=dat, font_file=font,
                      font_family=family, redirect_dir=redirect,
-                     game_exe=os.path.basename(exe) if exe else "")
+                     game_exe=os.path.basename(exe) if exe else "",
+                     **_icon_opts(opts))
     print("安装完成。双击游戏目录里的 KaguyaEngine_Patch.exe 就能玩中文版。")
     print("（配置里的游戏目录留空，跟着文件夹走——改名搬家都不用重装。）")
 
@@ -140,15 +148,23 @@ def _font_family(font):
 
 
 def _pack_opts(opts):
-    """从命令行尾巴里挑出 --no-zip / --name xxx。"""
-    return {"zip_it": "--no-zip" not in opts,
-            "folder_name": _opt_value(opts, "--name")}
+    """从命令行尾巴里挑出 --no-zip / --name xxx 以及图标选项。"""
+    d = {"zip_it": "--no-zip" not in opts,
+         "folder_name": _opt_value(opts, "--name")}
+    d.update(_icon_opts(opts))
+    return d
+
+
+def _icon_opts(opts):
+    """--icon-game <exe> / --icon-image <图片>；都没给就是不带图标。"""
+    return {"icon_game_exe": _opt_value(opts, "--icon-game") or None,
+            "icon_image": _opt_value(opts, "--icon-image") or None}
 
 
 def _opt_value(opts, key, default=""):
     if key in opts:
         i = opts.index(key)
-        if i + 1 < len(opts):
+        if i + 1 < len(opts) and not opts[i + 1].startswith("--"):
             return opts[i + 1]
     return default
 
