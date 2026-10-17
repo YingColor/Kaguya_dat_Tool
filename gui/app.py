@@ -137,17 +137,22 @@ class IconPicker:
         if exe:
             self.v_exe.set(os.path.normpath(exe))
 
-    def collect(self):
-        """返回 (game_exe, image_file)；选「不带」返回 (None, None)。"""
+    def collect(self, log=None):
+        """返回 (game_exe, image_file)；选「不带」返回 (None, None)。
+
+        选了「使用游戏图标」却没指定主程序时**降级成不带图标**并提示，
+        不抛错 —— 图标是锦上添花，不该把整个导出流程卡住。
+        （除非用户明确填了一个路径却找不到，那才是真填错了。）
+        """
         m = self.mode.get()
         if m == "none":
             return (None, None)
         if m == "game":
             exe = self.v_exe.get().strip()
             if not exe:
-                raise ValueError(
-                    "选了「使用游戏图标」，请先指定游戏启动程序（Start.exe）。\n"
-                    "点那一行的「浏览…」选，或先把上面的「游戏目录」填上。")
+                if log:
+                    log("提示：没指定游戏主程序，这次不给启动器换图标。")
+                return (None, None)
             if not os.path.isfile(exe):
                 raise ValueError("找不到这个游戏启动程序：\n%s" % exe)
             return (exe, None)
@@ -648,7 +653,8 @@ class App(tk.Tk):
                 raise ValueError("这个文件夹里没有 .ttf 字体")
             exe = kg_launch.find_game_exe(game)
             self.icon_install.autofill()
-            icon_game_exe, icon_image = self.icon_install.collect()
+            icon_game_exe, icon_image = self.icon_install.collect(
+                log=self._say)
             return (game, data, dat, os.path.join(data, fonts[0]),
                     os.path.basename(exe) if exe else "",
                     icon_game_exe, icon_image)
@@ -750,12 +756,29 @@ class App(tk.Tk):
             if not out:
                 raise ValueError("选个「放哪儿」——汉化包要生成到哪个文件夹")
             self.icon_pack.autofill()
-            icon_game_exe, icon_image = self.icon_pack.collect()
-            return (data, name, exe, os.path.normpath(out),
-                    self.v_plauncher.get().strip(),
-                    icon_game_exe, icon_image)
+            icon_game_exe, icon_image = self.icon_pack.collect(
+                log=self._say)
+            out = os.path.normpath(out)
+            lname = self.v_plauncher.get().strip()
 
-        def work(data, name, exe, out, lname, icon_game_exe, icon_image):
+            # 同名 zip 已经存在：在这里先问清楚，别等到打包时才报错。
+            # collect 跑在主线程，所以能弹窗。
+            overwrite = False
+            zpath = os.path.join(out, name + ".zip")
+            if os.path.exists(zpath):
+                overwrite = messagebox.askyesno(
+                    "同名汉化包已存在",
+                    "这个位置已经有一个同名的汉化包了：\n%s\n\n"
+                    "要覆盖它吗？\n\n"
+                    "选「否」可以回去改个名字再导出。" % zpath)
+                if not overwrite:
+                    raise ValueError("已取消。换个名字再导出，"
+                                     "或者先手动删掉上面那个 zip。")
+            return (data, name, exe, out, lname,
+                    icon_game_exe, icon_image, overwrite)
+
+        def work(data, name, exe, out, lname, icon_game_exe, icon_image,
+                 overwrite):
             fonts = [fn for fn in os.listdir(data)
                      if fn.lower().endswith(".ttf")]
             if not exe.lower().endswith(".exe"):
@@ -766,7 +789,7 @@ class App(tk.Tk):
                 out, message_dat=os.path.join(data, "message.dat"),
                 font_file=os.path.join(data, fonts[0]),
                 game_exe=os.path.basename(exe), folder_name=name,
-                launcher_name=lname,
+                launcher_name=lname, overwrite=overwrite,
                 log=self._say, icon_game_exe=icon_game_exe,
                 icon_image=icon_image)
 
