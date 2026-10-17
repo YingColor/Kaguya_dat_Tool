@@ -28,6 +28,7 @@ APP_TITLE = "KaguyaPatch   ——   Kaguya 引擎游戏汉化工具"
 FONT_FILE = "KaguyaPatchCN.ttf"
 FONT_FAMILY = "KaguyaPatchCN"
 REDIRECT = "KaguyaTrans"
+LOG_HEIGHT = 12        # 日志区默认行数（屏幕不够高时会自动压缩）
 
 
 def read_name_from_file(path):
@@ -162,8 +163,6 @@ class App(tk.Tk):
     def __init__(self):
         super().__init__()
         self.title(APP_TITLE)
-        self.geometry("880x680")
-        self.minsize(780, 600)
         self.q = queue.Queue()
         try:
             # 顺手把「自备字体」文件夹和里面的说明准备好（缺了才写）
@@ -171,7 +170,37 @@ class App(tk.Tk):
         except Exception:
             pass
         self._build_ui()
+        self._fit_to_screen()
         self.after(80, self._drain)
+
+    def _fit_to_screen(self):
+        """把窗口调到「内容刚好放得下，又不超出屏幕」。
+
+        窗口本来写死 880x680，但内容自然高度有 900 多，
+        多出来的部分会把底部日志整个顶出窗口外（实测 y = -83，看不见）。
+        这里改成先量出真实需求，再受屏幕高度约束；
+        屏幕不够高时先压缩日志区，实在放不下才把窗口压进屏幕。
+        """
+        self.update_idletasks()
+        sw, sh = self.winfo_screenwidth(), self.winfo_screenheight()
+        need_w, need_h = self.winfo_reqwidth(), self.winfo_reqheight()
+
+        w = min(max(need_w + 60, 900), max(sw - 60, 400))
+        cap = max(sh - 100, 400)          # 留任务栏 + 标题栏
+
+        if need_h > cap:
+            # 屏幕不够高：先试着压缩日志区（每减 1 行约省 18px）
+            over = need_h - cap
+            shrink = min(over // 18, LOG_HEIGHT - 4)
+            if shrink > 0:
+                self.log.configure(height=LOG_HEIGHT - shrink)
+                self.update_idletasks()
+                need_h = self.winfo_reqheight()
+        h = min(max(need_h, 420), cap)
+
+        x, y = (sw - w) // 2, max(0, (sh - h) // 2 - 20)
+        self.geometry("%dx%d+%d+%d" % (w, h, x, y))
+        self.minsize(min(880, w), min(max(h - 160, 420), h))
 
     # ------------------------------------------------------------ 界面
 
@@ -204,7 +233,7 @@ class App(tk.Tk):
 
         box = ttk.LabelFrame(self, text="日志", padding=6)
         box.pack(fill="both", padx=12, pady=(0, 4))
-        self.log = tk.Text(box, height=12, wrap="word",
+        self.log = tk.Text(box, height=LOG_HEIGHT, wrap="word",
                            font=("Consolas", 9), background="#fbfbfb")
         sb = ttk.Scrollbar(box, command=self.log.yview)
         self.log.configure(yscrollcommand=sb.set)
