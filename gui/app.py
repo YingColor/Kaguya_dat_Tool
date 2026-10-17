@@ -29,6 +29,8 @@ FONT_FILE = "KaguyaPatchCN.ttf"
 FONT_FAMILY = "KaguyaPatchCN"
 REDIRECT = "KaguyaTrans"
 LOG_HEIGHT = 12        # 日志区默认行数（屏幕不够高时会自动压缩）
+LABEL_W = 22           # 行标签统一宽度（字符单位，中文一个字占 2）
+SCROLL_H = 580         # 每页可滚动区域的初始高度（最高那页约 567，默认能全放下）
 
 
 def read_name_from_file(path):
@@ -63,7 +65,7 @@ class IconPicker:
 
         self.row_exe = ttk.Frame(f)
         self.row_exe.pack(fill="x", padx=(22, 0), pady=(2, 0))
-        ttk.Label(self.row_exe, text="游戏启动程序", width=14,
+        ttk.Label(self.row_exe, text="游戏启动程序", width=LABEL_W,
                   anchor="w").pack(side="left")
         ttk.Entry(self.row_exe, textvariable=self.v_exe).pack(
             side="left", fill="x", expand=True)
@@ -72,7 +74,7 @@ class IconPicker:
 
         self.row_img = ttk.Frame(f)
         self.row_img.pack(fill="x", padx=(22, 0), pady=(2, 0))
-        ttk.Label(self.row_img, text="图标图片", width=14,
+        ttk.Label(self.row_img, text="图标图片", width=LABEL_W,
                   anchor="w").pack(side="left")
         ttk.Entry(self.row_img, textvariable=self.v_img).pack(
             side="left", fill="x", expand=True)
@@ -176,6 +178,7 @@ class App(tk.Tk):
             pass
         self._build_ui()
         self._fit_to_screen()
+        self.after(150, self._fit_pane)     # 窗口出来后再贴合一次本页内容
         self.after(80, self._drain)
 
     def _fit_to_screen(self):
@@ -226,18 +229,29 @@ class App(tk.Tk):
             "也不需要你懂命令行——从原版游戏出发，四步搞定。")
         ).pack(anchor="w", pady=(2, 0))
 
-        nb = ttk.Notebook(self)
-        nb.pack(fill="both", expand=True, padx=12, pady=10)
+        # 上下可拖拽：上面是标签页，下面是日志。
+        # 内容多的页可以滚轮滚；内容少的页留白正好让位给日志。
+        paned = ttk.PanedWindow(self, orient="vertical")
+        paned.pack(fill="both", expand=True, padx=12, pady=(10, 4))
+        self.paned = paned
+
+        nb = ttk.Notebook(paned)
+        paned.add(nb, weight=3)
         self.nb = nb
-        nb.add(self._tab_export(nb), text="  1. 导出日文原文  ")
-        nb.add(self._tab_build(nb), text="  2. 打回译文、做字体  ")
-        nb.add(self._tab_install(nb), text="  3. 装进游戏  ")
-        nb.add(self._tab_play(nb), text="  4. 开始玩 / 还原  ")
-        nb.add(self._tab_pack(nb), text="  5. 导出汉化包  ")
+        nb.add(self._scroll_tab(nb, self._tab_export),
+               text="  1. 导出日文原文  ")
+        nb.add(self._scroll_tab(nb, self._tab_build),
+               text="  2. 打回译文、做字体  ")
+        nb.add(self._scroll_tab(nb, self._tab_install),
+               text="  3. 装进游戏  ")
+        nb.add(self._scroll_tab(nb, self._tab_play),
+               text="  4. 开始玩 / 还原  ")
+        nb.add(self._scroll_tab(nb, self._tab_pack),
+               text="  5. 导出汉化包  ")
         nb.bind("<<NotebookTabChanged>>", self._on_tab)
 
-        box = ttk.LabelFrame(self, text="日志", padding=6)
-        box.pack(fill="both", padx=12, pady=(0, 4))
+        box = ttk.LabelFrame(paned, text="日志", padding=6)
+        paned.add(box, weight=1)
         self.log = tk.Text(box, height=LOG_HEIGHT, wrap="word",
                            font=("Consolas", 9), background="#fbfbfb")
         sb = ttk.Scrollbar(box, command=self.log.yview)
@@ -249,6 +263,57 @@ class App(tk.Tk):
         bar.pack(fill="x")
         self.status = ttk.Label(bar, text="就绪", foreground="#666")
         self.status.pack(side="left")
+
+    # ------------------------------------------------------------ 可滚动页
+
+    def _scroll_tab(self, parent, builder):
+        """把一页内容包进「可上下滚动」的容器。
+
+        内容比可视区高时出现滚动条，鼠标滚轮直接滚；
+        内容少时就留白 —— 这块留白正好让用户把分隔条往上拖，
+        换成更大的日志区。
+        """
+        bg = "#f0f0f0"
+        try:
+            bg = ttk.Style(self).lookup("TFrame", "background") or bg
+        except Exception:
+            pass
+
+        outer = ttk.Frame(parent)
+        canvas = tk.Canvas(outer, highlightthickness=0, borderwidth=0,
+                           height=SCROLL_H, background=bg)
+        vsb = ttk.Scrollbar(outer, orient="vertical", command=canvas.yview)
+        canvas.configure(yscrollcommand=vsb.set)
+        vsb.pack(side="right", fill="y")
+        canvas.pack(side="left", fill="both", expand=True)
+
+        inner = builder(canvas)          # 原来的 _tab_* 接受 parent
+        win = canvas.create_window((0, 0), window=inner, anchor="nw")
+
+        def sync(_e=None):
+            canvas.configure(scrollregion=canvas.bbox("all"))
+
+        def on_canvas(e):
+            canvas.itemconfigure(win, width=e.width)   # 跟随宽度
+            sync()
+
+        inner.bind("<Configure>", sync)
+        canvas.bind("<Configure>", on_canvas)
+
+        def wheel(e):
+            # 只有装不下时才拦滚轮，免得内容少的页把滚轮吃掉
+            if inner.winfo_reqheight() > canvas.winfo_height():
+                canvas.yview_scroll(int(-1 * (e.delta / 120)), "units")
+            return "break"
+
+        def bind_wheel(w):
+            w.bind("<MouseWheel>", wheel)
+            for c in w.winfo_children():
+                bind_wheel(c)
+
+        bind_wheel(inner)
+        canvas.bind("<MouseWheel>", wheel)
+        return outer
 
     # ------------------------------------------------------------ 小工具
 
@@ -267,7 +332,7 @@ class App(tk.Tk):
         if mode == "text":
             f = ttk.Frame(parent)
             f.pack(fill="x", pady=4)
-            ttk.Label(f, text=label, width=14, anchor="w").pack(side="left")
+            ttk.Label(f, text=label, width=LABEL_W, anchor="w").pack(side="left")
             ttk.Entry(f, textvariable=var).pack(side="left", fill="x",
                                                 expand=True)
             if tip:
@@ -277,7 +342,7 @@ class App(tk.Tk):
 
         f = ttk.Frame(parent)
         f.pack(fill="x", pady=4)
-        ttk.Label(f, text=label, width=14, anchor="w").pack(side="left")
+        ttk.Label(f, text=label, width=LABEL_W, anchor="w").pack(side="left")
         e = ttk.Entry(f, textvariable=var)
         e.pack(side="left", fill="x", expand=True)
         if tip:
@@ -446,7 +511,7 @@ class App(tk.Tk):
 
         row = ttk.Frame(f)
         row.pack(fill="x", pady=(10, 2))
-        ttk.Label(row, text="导出成", width=14, anchor="w").pack(side="left")
+        ttk.Label(row, text="导出成", width=LABEL_W, anchor="w").pack(side="left")
         self.v_expmode = tk.StringVar(value=kg_text.EXPORT_MODES[0][1])
         self.cb_expmode = ttk.Combobox(row, textvariable=self.v_expmode,
                                        width=52, state="readonly")
@@ -455,7 +520,7 @@ class App(tk.Tk):
 
         row2 = ttk.Frame(f)
         row2.pack(fill="x", pady=2)
-        ttk.Label(row2, text="", width=14).pack(side="left")
+        ttk.Label(row2, text="", width=LABEL_W).pack(side="left")
         self.v_keepnl = tk.BooleanVar(value=True)
         ttk.Checkbutton(row2, text="保留每条结尾的 \\n",
                         variable=self.v_keepnl).pack(side="left")
@@ -534,7 +599,7 @@ class App(tk.Tk):
         self.v_tr = tk.StringVar()
         self.v_out = tk.StringVar()
         self._row(f, "原版 message.dat", self.v_src, False,
-                  tip="必须是没汉化过的原版，尾部数据要以它为准")
+                  tip="必须是原版，尾部要能对上")
         self._row(f, "译文文件", self.v_tr, False, tip="第 1 步导出的那份")
         self._row(f, "输出文件夹", self.v_out, True)
 
@@ -544,14 +609,14 @@ class App(tk.Tk):
 
         row = ttk.Frame(f)
         row.pack(fill="x", pady=2)
-        ttk.Label(row, text="字体名", width=14, anchor="w").pack(side="left")
+        ttk.Label(row, text="字体名", width=LABEL_W, anchor="w").pack(side="left")
         ttk.Entry(row, textvariable=self.v_fontname, width=26).pack(side="left")
         ttk.Label(row, text="字体内部名", width=12, anchor="e").pack(side="left")
         ttk.Entry(row, textvariable=self.v_family, width=20).pack(side="left")
 
         row2 = ttk.Frame(f)
         row2.pack(fill="x", pady=2)
-        ttk.Label(row2, text="底座字体", width=14, anchor="w").pack(side="left")
+        ttk.Label(row2, text="底座字体", width=LABEL_W, anchor="w").pack(side="left")
         self.cb_base = ttk.Combobox(row2, textvariable=self.v_base, width=44,
                                     state="readonly")
         # 标签 -> (显示名, 路径, 序号)；界面上的字带备注，实际用的还是干净值
@@ -624,7 +689,7 @@ class App(tk.Tk):
         self._row(f, "游戏目录", self.v_igame, True,
                   tip="里面有 Start.exe 的那一层")
         self._row(f, "汉化数据文件夹", self.v_idata, True,
-                  tip="第 2 步的输出文件夹（导出汉化包时可以留空）")
+                  tip="第 2 步的输出；可留空")
 
         ttk.Label(f, foreground="#888", text=(
             "（想换字体请回第 2 步选「底座字体」——字体是在那一步做出来的）")
@@ -652,6 +717,23 @@ class App(tk.Tk):
             if not fonts:
                 raise ValueError("这个文件夹里没有 .ttf 字体")
             exe = kg_launch.find_game_exe(game)
+            if exe:
+                # 64 位游戏装不上：钩子只有 32 位，64 位进程加载不了 32 位 DLL。
+                # 不拦死，但必须先说清楚，别让人装完对着乱码干等。
+                try:
+                    info = kg_launch.scan_pe(exe)
+                except Exception:
+                    info = None
+                if info and info.get("arch") == 64:
+                    if not messagebox.askyesno(
+                            "这个游戏是 64 位的",
+                            "检测到游戏主程序是 64 位：\n%s\n\n"
+                            "当前的钩子（winmm.dll）只有 32 位版本，"
+                            "64 位程序加载不了它，\n"
+                            "所以装进去以后大概率不会有中文。\n\n"
+                            "还要继续装吗？" % os.path.basename(exe)):
+                        raise ValueError(
+                            "已取消。这个游戏是 64 位的，当前版本不支持。")
             self.icon_install.autofill()
             icon_game_exe, icon_image = self.icon_install.collect(
                 log=self._say)
@@ -717,15 +799,15 @@ class App(tk.Tk):
         self.v_pout = tk.StringVar()
 
         self._row(f, "汉化数据文件夹", self.v_pdata, True,
-                  tip="第 2 步的输出：里面有 message.dat 和 .ttf")
+                  tip="第 2 步的输出")
         self._row(f, "汉化包名字", self.v_pname, False, kind="text",
                   tip="压缩包用这个名字，随便改")
         self._row(f, "要启动的 exe", self.v_pexe, False, kind="text",
-                  tip="游戏主程序名，一般就是 Start.exe")
+                  tip="一般就是 Start.exe")
         self._row(f, "启动器文件名", self.v_plauncher, False, kind="text",
                   tip="包里那个启动器叫什么；留空就用默认名")
         self._row(f, "放哪儿", self.v_pout, True,
-                  tip="汉化包（一个 zip）生成到这个文件夹里")
+                  tip="生成到这里的 zip")
 
         ttk.Label(f, foreground="#888", justify="left", text=(
             "exe 名字填错也不致命：拿包的人双击启动器时，它自己还会再找一遍。\n"
@@ -918,8 +1000,48 @@ class App(tk.Tk):
                 messagebox.showerror("出错", str(e))
         return wrapped
 
+    def _fit_pane(self):
+        """把分隔条挪到「刚好放下本页内容」的位置，多余高度让给日志。
+
+        内容少的页（第 1/2 页）不再留一大块空白，
+        内容多的页（第 3/5 页）也不会把日志压没。
+        用户随时可以自己拖这条分隔线，拖完不会被立刻改回去。
+        """
+        try:
+            idx = self.nb.index(self.nb.select())
+            outer = self.nb.nametowidget(self.nb.tabs()[idx])
+        except Exception:
+            return
+
+        canvas = None
+        for c in outer.winfo_children():
+            if isinstance(c, tk.Canvas):
+                canvas = c
+                break
+        if canvas is None:
+            return
+        kids = canvas.winfo_children()
+        inner = kids[0] if kids else None
+        if inner is None:
+            return
+
+        self.update_idletasks()
+        total = self.paned.winfo_height()
+        if total <= 1:                 # 窗口还没映射好，稍后再试
+            self.after(120, self._fit_pane)
+            return
+
+        # 上面那格 = 本页内容高度 + 标签栏/边距；超过上限就按可滚动高度算
+        upper = min(inner.winfo_reqheight(), SCROLL_H) + 40
+        pos = max(min(upper, total - 110), 150)    # 至少给日志留 110px
+        try:
+            self.paned.sashpos(0, pos)
+        except Exception:
+            pass
+
     def _on_tab(self, _event=None):
         """切页时顺手把参数带过去，省得用户重复填。"""
+        self.after(20, self._fit_pane)
         try:
             idx = self.nb.index(self.nb.select())
         except Exception:
